@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>聖經勇士・史詩橫向捲軸清關傳</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      width: 100vw; height: 100vh; background: #070a0f; color: #f8fafc;
+      font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    #gameContainer {
+      position: relative; width: 100vw; height: 100vh;
+      max-width: 177.78vh; max-height: 56.25vw;
+      background: #111827; box-shadow: 0 24px 60px rgba(0,0,0,0.9); overflow: hidden;
+    }
+    canvas#gameCanvas { width: 100%; height: 100%; display: block; }
+
+    #hud {
+      position: absolute; top: 10px; left: 16px; right: 16px;
+      display: flex; justify-content: space-between; align-items: center;
+      pointer-events: none; z-index: 8; font-size: 13px; font-weight: bold;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.9); gap: 8px;
+    }
+    .hud-box {
+      background: rgba(9,13,21,0.76); border: 1.5px solid rgba(253,230,138,0.32);
+      padding: 5px 13px; border-radius: 999px; white-space: nowrap;
+    }
+    .hp-bar-wrap { display: inline-flex; align-items: center; gap: 8px; }
+    .hp-track { width: 120px; height: 11px; background: rgba(255,255,255,0.18); border-radius: 999px; overflow: hidden; border: 1px solid rgba(0,0,0,0.6); }
+    .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b); transition: width 0.14s ease; }
+
+    .touch-controls { position: absolute; inset: 0; pointer-events: none; z-index: 9; }
+    .dpad { position: absolute; left: 16px; bottom: 14px; width: 124px; height: 124px; pointer-events: auto; }
+    .dpad-btn {
+      position: absolute; width: 42px; height: 42px; border-radius: 10px;
+      background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.3);
+      color: #fff; font-size: 15px; font-weight: bold;
+    }
+    .btn-up { left: 41px; top: 0; }
+    .btn-down { left: 41px; bottom: 0; }
+    .btn-left { left: 0; top: 41px; }
+    .btn-right { right: 0; top: 41px; }
+    .action-btns { position: absolute; right: 18px; bottom: 20px; display: flex; gap: 12px; pointer-events: auto; }
+    .act-btn {
+      width: 62px; height: 62px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.38);
+      font-size: 15px; font-weight: bold; color: #fff;
+    }
+    #btnJump { background: rgba(37,99,235,0.78); }
+    #btnAttack { background: rgba(220,38,38,0.86); }
+
+    #overlay {
+      position: absolute; inset: 0; background: rgba(8,12,20,0.92);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 14px 18px; z-index: 30;
+    }
+    #overlay h1 { font-size: 23px; color: #fde68a; margin-bottom: 6px; letter-spacing: 1px; }
+    #overlayDesc { font-size: 12.5px; line-height: 1.55; color: #cbd5e1; max-width: 740px; margin-bottom: 12px; }
+    .hero-cards {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+      width: 100%; max-width: 740px; margin-bottom: 14px;
+    }
+    .hero-card {
+      background: rgba(255,255,255,0.07); border: 1.5px solid rgba(255,255,255,0.2);
+      border-radius: 14px; padding: 10px 12px; text-align: left; cursor: pointer;
+    }
+    .hero-card.active { border-color: #fbbf24; background: rgba(251,191,36,0.18); box-shadow: 0 0 18px rgba(251,191,36,0.25); }
+    .hero-name { font-size: 15px; font-weight: bold; color: #fde68a; }
+    .hero-role { font-size: 11.5px; color: #93c5fd; margin: 2px 0 5px; }
+    .hero-stats { font-size: 11.5px; line-height: 1.5; color: #e2e8f0; }
+    #startBtn {
+      background: linear-gradient(135deg, #f59e0b, #c26d10); color: #160d05;
+      border: none; border-radius: 12px; padding: 10px 30px; font-size: 16px; font-weight: bold;
+      cursor: pointer; box-shadow: 0 6px 18px rgba(245,158,11,0.38);
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <div id="hud">
+      <div class="hud-box hp-bar-wrap">
+        <span id="heroHudName">大衛</span>
+        <div class="hp-track"><div class="hp-fill" id="hpFill"></div></div>
+        <span id="hpNum">105/105</span>
+      </div>
+      <div class="hud-box" id="sceneText">區域：野外青草森林</div>
+      <div class="hud-box" id="waveInfoText">波次：待觸發</div>
+      <div class="hud-box">得分：<span id="scoreText">0</span></div>
+    </div>
+
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+
+    <div class="touch-controls">
+      <div class="dpad">
+        <button class="dpad-btn btn-up" data-key="up" type="button">▲</button>
+        <button class="dpad-btn btn-down" data-key="down" type="button">▼</button>
+        <button class="dpad-btn btn-left" data-key="left" type="button">◀</button>
+        <button class="dpad-btn btn-right" data-key="right" type="button">▶</button>
+      </div>
+      <div class="action-btns">
+        <button class="act-btn" id="btnJump" type="button">跳</button>
+        <button class="act-btn" id="btnAttack" type="button">斬</button>
+      </div>
+    </div>
+
+    <div id="overlay">
+      <h1 id="overlayTitle">⚔️ 聖經勇士・史詩橫向捲軸清關傳 ⚔️</h1>
+      <p id="overlayDesc">
+        每前進 <strong>350~450</strong> 觸發一波（隨機 <strong>2~3</strong> 人），跨越<strong>森林 → 城鎮 → 城堡 → 監獄</strong>，迎戰該隱、埃及法老、耶洗別王后與撒旦！<br>
+        電腦：<strong>方向鍵/WASD</strong> 走位，<strong>J/Z</strong> 攻擊，<strong>K/X</strong> 跳躍；手機：左下方向鍵、右下「跳/斬」。
+      </p>
+      <div class="hero-cards">
+        <div class="hero-card active" data-hero="david" onclick="window.selectHero('david')">
+          <div class="hero-name">大衛（牧羊戰士）</div>
+          <div class="hero-role">靈活高跳・牧羊投石短劍</div>
+          <div class="hero-stats">血量：105 ｜ 攻擊：22<br>範圍：90 ｜ 跳躍：高跳躍</div>
+        </div>
+        <div class="hero-card" data-hero="samson" onclick="window.selectHero('samson')">
+          <div class="hero-name">參孫（力士勇者）</div>
+          <div class="hero-role">重裝高傷・巨型黃金戰錘</div>
+          <div class="hero-stats">血量：145 ｜ 攻擊：34<br>範圍：100 ｜ 跳躍：穩健跳</div>
+        </div>
+        <div class="hero-card" data-hero="joshua" onclick="window.selectHero('joshua')">
+          <div class="hero-name">約書亞（指揮劍士）</div>
+          <div class="hero-role">聖光長劍・統帥銀金甲</div>
+          <div class="hero-stats">血量：120 ｜ 攻擊：26<br>範圍：112 ｜ 跳躍：中高跳</div>
+        </div>
+      </div>
+      <button id="startBtn" type="button" onclick="window.startBibleEpicGame()">開始史詩征戰</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      const heroHudName = document.getElementById("heroHudName");
+      const hpFill = document.getElementById("hpFill");
+      const hpNum = document.getElementById("hpNum");
+      const sceneText = document.getElementById("sceneText");
+      const waveInfoText = document.getElementById("waveInfoText");
+      const scoreText = document.getElementById("scoreText");
+      const overlay = document.getElementById("overlay");
+      const overlayTitle = document.getElementById("overlayTitle");
+      const overlayDesc = document.getElementById("overlayDesc");
+      const startBtn = document.getElementById("startBtn");
+
+      const MIN_LANE_Y = 278;
+      const MAX_LANE_Y = 502;
+      const WORLD_WIDTH = 24000;
+      const TOTAL_WAVES = 45;
+
+      const HERO_CONFIGS = {
+        david: { title: "大衛", maxHp: 105, atk: 22, reachX: 90, laneTolY: 32, jumpPower: -13.2, speedX: 5.2, speedY: 3.5, cloak: "#2563eb", tunic: "#1d4ed8", trim: "#fbbf24", weaponType: "slingBlade" },
+        samson: { title: "參孫", maxHp: 145, atk: 34, reachX: 100, laneTolY: 38, jumpPower: -10.4, speedX: 4.5, speedY: 3.0, cloak: "#b91c1c", tunic: "#991b1b", trim: "#fcd34d", weaponType: "heavyMace" },
+        joshua: { title: "約書亞", maxHp: 120, atk: 26, reachX: 112, laneTolY: 35, jumpPower: -11.6, speedX: 4.9, speedY: 3.25, cloak: "#0f766e", tunic: "#115e59", trim: "#fde68a", weaponType: "longSword" }
+      };
+
+      const ENEMY_TIERS = {
+        1: { level: 1, name: "該隱", hp: 30, speedX: 1.25, speedY: 0.85, atk: 6, score: 25, scale: 1.02, dropChance: 0.34 },
+        3: { level: 3, name: "埃及法老", hp: 52, speedX: 1.48, speedY: 0.98, atk: 10, score: 45, scale: 1.1, dropChance: 0.30 },
+        5: { level: 5, name: "耶洗別王后", hp: 76, speedX: 1.82, speedY: 1.22, atk: 13, score: 65, scale: 1.08, dropChance: 0.28 },
+        10: { level: 10, name: "亞述巨將", hp: 128, speedX: 1.55, speedY: 1.0, atk: 18, score: 100, scale: 1.26, dropChance: 0.25 },
+        20: { level: 20, name: "撒旦", hp: 220, speedX: 2.05, speedY: 1.35, atk: 24, score: 220, scale: 1.38, dropChance: 0.28 }
+      };
+
+      // 動態產生觸發點：每前進 350 ~ 450 單位觸發一波（共 45 波，最後一波在深淵監獄迎戰撒旦）
+      function generateTriggers() {
+        const list = [];
+        let cursorX = 420;
+        for (let w = 1; w <= TOTAL_WAVES; w++) {
+          const step = 350 + Math.floor(Math.random() * 101); // 350 ~ 450
+          const count = 2 + Math.floor(Math.random() * 2);  // 2 ~ 3 人
+          list.push({
+            waveNum: w,
+            triggerX: cursorX,
+            count,
+            triggered: false,
+            cleared: false
+          });
+          cursorX = Math.min(WORLD_WIDTH - 450, cursorX + step);
+        }
+        return list;
+      }
+
+      let triggers = [], activeTrigger = null, clearedWaves = 0;
+      let cameraX = 0, targetCameraX = 0, goBannerTimer = 0;
+      let selectedHeroKey = "david", running = false, rafId = null, score = 0, animClock = 0;
+      let enemies = [], pickups = [], particles = [], slashEffect = null;
+      const input = { left: false, right: false, up: false, down: false };
+
+      const player = {
+        x: 160, y: 386, z: 0, vz: 0, facing: 1, hp: 105, maxHp: 105,
+        atk: 22, reachX: 90, laneTolY: 32, jumpPower: -13.2, speedX: 5.2, speedY: 3.5,
+        cloak: "#2563eb", tunic: "#1d4ed8", trim: "#fbbf24", weaponType: "slingBlade",
+        attackCooldown: 0, attackTimer: 0, invulnTimer: 0, knockVx: 0, walkPhase: 0
+      };
+
+      function createGroundPatterns() {
+        const patterns = {};
+        const c1 = document.createElement("canvas");
+        c1.width = 120; c1.height = 80;
+        const g1 = c1.getContext("2d");
+        g1.fillStyle = "#784415"; g1.fillRect(0, 0, 120, 80);
+        g1.fillStyle = "rgba(45, 22, 6, 0.26)";
+        [[20,18,10,6],[65,24,12,7],[100,15,9,5],[38,55,13,7],[85,60,11,6]].forEach(([x,y,rx,ry]) => {
+          g1.beginPath(); g1.ellipse(x, y, rx, ry, 0.2, 0, Math.PI * 2); g1.fill();
+        });
+        patterns.forest = ctx.createPattern(c1, "repeat");
+
+        const c2 = document.createElement("canvas");
+        c2.width = 128; c2.height = 64;
+        const g2 = c2.getContext("2d");
+        g2.fillStyle = "#526071"; g2.fillRect(0, 0, 128, 64);
+        g2.strokeStyle = "#334155"; g2.lineWidth = 2;
+        g2.strokeRect(1, 1, 62, 30); g2.strokeRect(65, 1, 62, 30); g2.strokeRect(33, 33, 62, 30);
+        patterns.town = ctx.createPattern(c2, "repeat");
+
+        const c3 = document.createElement("canvas");
+        c3.width = 96; c3.height = 64;
+        const g3 = c3.getContext("2d");
+        g3.fillStyle = "#334155"; g3.fillRect(0, 0, 96, 64);
+        g3.fillStyle = "#475569";
+        g3.beginPath(); g3.moveTo(48, 0); g3.lineTo(96, 32); g3.lineTo(48, 64); g3.lineTo(0, 32); g3.closePath(); g3.fill();
+        patterns.castle = ctx.createPattern(c3, "repeat");
+
+        const c4 = document.createElement("canvas");
+        c4.width = 110; c4.height = 64;
+        const g4 = c4.getContext("2d");
+        g4.fillStyle = "#1f242d"; g4.fillRect(0, 0, 110, 64);
+        g4.strokeStyle = "#0f1217"; g4.lineWidth = 2.5;
+        g4.strokeRect(0, 0, 55, 32); g4.strokeRect(55, 0, 55, 32); g4.strokeRect(27, 32, 55, 32);
+        patterns.prison = ctx.createPattern(c4, "repeat");
+
+        return patterns;
+      }
+      const GROUND_PATTERNS = createGroundPatterns();
+
+      function getZoneName(wx) {
+        if (wx < 5800) return "野外青草森林";
+        if (wx < 6250) return "森林石橋關卡";
+        if (wx < 11800) return "繁華城鎮市集";
+        if (wx < 12250) return "王宮雙塔拱門";
+        if (wx < 17800) return "金碧輝煌城堡大廳";
+        if (wx < 18250) return "深淵地牢鐵閘";
+        return "深淵黑曜監獄";
+      }
+
+      function selectHero(key) {
+        if (!HERO_CONFIGS[key]) return;
+        selectedHeroKey = key;
+        document.querySelectorAll(".hero-card").forEach(c => {
+          c.classList.toggle("active", c.getAttribute("data-hero") === key);
+        });
+      }
+
+      function updateHud() {
+        hpFill.style.width = Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100)) + "%";
+        hpNum.textContent = Math.max(0, Math.ceil(player.hp)) + "/" + player.maxHp;
+        sceneText.textContent = "區域：" + getZoneName(player.x);
+        waveInfoText.textContent = activeTrigger
+          ? "第 " + activeTrigger.waveNum + " 波（剩 " + enemies.length + " 人）"
+          : "已清 " + clearedWaves + " / " + TOTAL_WAVES + " 波";
+        scoreText.textContent = String(score);
+      }
+
+      // 依目前所在區域與波次隨機挑選 2~3 位聖經敵人，從畫面右側或左右隨機邊緣進場
+      function pickEnemyLevelForWorld(wx, waveNum) {
+        if (waveNum >= TOTAL_WAVES - 1 && wx >= 18000) {
+          return Math.random() < 0.65 ? 20 : 10;
+        }
+        if (wx < 6000) {
+          return Math.random() < 0.72 ? 1 : 3;
+        }
+        if (wx < 12000) {
+          const r = Math.random();
+          return r < 0.45 ? 3 : (r < 0.85 ? 5 : 1);
+        }
+        if (wx < 18000) {
+          const r = Math.random();
+          return r < 0.45 ? 5 : (r < 0.88 ? 10 : 3);
+        }
+        const r = Math.random();
+        return r < 0.45 ? 10 : (r < 0.85 ? 20 : 5);
+      }
+
+      function activateTrigger(trig) {
+        trig.triggered = true;
+        activeTrigger = trig;
+        const diff = Math.min(5, 1 + Math.floor(trig.waveNum / 9));
+        const speedScale = 0.82 + (diff - 1) * 0.08;
+        const statScale = 0.9 + (diff - 1) * 0.1;
+
+        for (let i = 0; i < trig.count; i++) {
+          const lv = pickEnemyLevelForWorld(player.x, trig.waveNum);
+          const tpl = ENEMY_TIERS[lv];
+          const maxHp = Math.round(tpl.hp * statScale);
+          // 主要從右側進場，偶爾一隻從左側或更遠右側交錯進場，不集中在同一點
+          const fromLeft = i === trig.count - 1 && Math.random() < 0.25 && cameraX > 120;
+          const spawnX = fromLeft
+            ? cameraX - 50 - Math.random() * 60
+            : cameraX + canvas.width + 40 + i * 95 + Math.random() * 55;
+          const spawnY = MIN_LANE_Y + 18 + Math.random() * (MAX_LANE_Y - MIN_LANE_Y - 36);
+
+          enemies.push({
+            level: tpl.level,
+            name: tpl.name,
+            x: spawnX,
+            y: spawnY,
+            facing: fromLeft ? 1 : -1,
+            hp: maxHp,
+            maxHp,
+            speedX: tpl.speedX * speedScale * (0.9 + Math.random() * 0.25),
+            speedY: tpl.speedY * speedScale,
+            atkDamage: Math.round(tpl.atk * statScale),
+            score: tpl.score,
+            scale: tpl.scale,
+            dropChance: tpl.dropChance,
+            difficulty: diff,
+            atkCooldown: 60 + i * 22,
+            atkAnim: 0,
+            hitFlash: 0,
+            knockVx: 0,
+            walkPhase: Math.random() * Math.PI * 2
+          });
+        }
+        updateHud();
+      }
+
+      function startGame() {
+        if (rafId) cancelAnimationFrame(rafId);
+        const cfg = HERO_CONFIGS[selectedHeroKey] || HERO_CONFIGS.david;
+        Object.assign(player, cfg, {
+          hp: cfg.maxHp, x: 160, y: 386, z: 0, vz: 0, facing: 1,
+          attackCooldown: 0, attackTimer: 0, invulnTimer: 0, knockVx: 0, walkPhase: 0
+        });
+        heroHudName.textContent = cfg.title;
+        score = 0; clearedWaves = 0;
+        cameraX = 0; targetCameraX = 0;
+        activeTrigger = null; goBannerTimer = 110;
+        triggers = generateTriggers();
+        enemies = []; pickups = []; particles = []; slashEffect = null;
+        updateHud();
+        overlay.style.display = "none";
+        running = true;
+        rafId = requestAnimationFrame(loop);
+      }
+
+      function endGame(victory) {
+        running = false;
+        if (rafId) cancelAnimationFrame(rafId);
+        overlayTitle.textContent = victory ? "🏆 史詩凱旋・光耀聖殿！" : "💀 勇士力竭倒下";
+        overlayDesc.innerHTML = (victory ? "你橫越 24,000 史詩戰場並擊敗撒旦！" : "善用上下走位與回血聖膏再戰！") + "<br>最終得分：<strong>" + score + "</strong> 分";
+        startBtn.textContent = "再次出征";
+        overlay.style.display = "flex";
+      }
+
+      function triggerJump() {
+        if (running && player.z === 0) player.vz = player.jumpPower;
+      }
+
+      function triggerAttack() {
+        if (!running || player.attackCooldown > 0) return;
+        player.attackCooldown = 16;
+        player.attackTimer = 9;
+        slashEffect = { x: player.x + player.facing * (player.reachX * 0.52), y: player.y + player.z - 34, facing: player.facing, radius: player.reachX * 0.46, life: 1 };
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const en = enemies[i];
+          const dx = (en.x - player.x) * player.facing;
+          const dy = Math.abs(en.y - player.y);
+          if (dx >= -14 && dx <= player.reachX && dy <= player.laneTolY) {
+            en.hp -= player.atk; en.hitFlash = 7; en.knockVx = player.facing * 7.5;
+            for (let k = 0; k < 7; k++) particles.push({ x: en.x, y: en.y - 30, vx: (Math.random() - 0.5) * 6.5, vy: (Math.random() - 0.7) * 5.5, life: 1, color: "#fde047" });
+            if (en.hp <= 0) {
+              score += en.score;
+              if (Math.random() < en.dropChance) {
+                pickups.push({ x: en.x, y: Math.max(MIN_LANE_Y + 12, Math.min(MAX_LANE_Y - 8, en.y)), life: 1, decayPerSec: 0.12 + (en.difficulty - 1) * 0.05, healAmount: 26 });
+              }
+              enemies.splice(i, 1);
+            }
+          }
+        }
+
+        if (activeTrigger && enemies.length === 0) {
+          activeTrigger.cleared = true;
+          activeTrigger = null;
+          clearedWaves++;
+          goBannerTimer = 140;
+          if (clearedWaves >= TOTAL_WAVES) endGame(true);
+        }
+        updateHud();
+      }
+
+      function drawDetailedTree(tx, groundY, seed) {
+        ctx.save();
+        ctx.fillStyle = "#451a03";
+        ctx.beginPath();
+        ctx.moveTo(tx - 11, groundY); ctx.lineTo(tx - 7, groundY - 96);
+        ctx.lineTo(tx + 7, groundY - 96); ctx.lineTo(tx + 11, groundY);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "#270e02"; ctx.lineWidth = 2; ctx.stroke();
+
+        const greens = seed % 2 === 0 ? ["#14532d", "#166534", "#22c55e"] : ["#166534", "#15803d", "#4ade80"];
+        ctx.fillStyle = greens[0];
+        ctx.beginPath(); ctx.arc(tx - 24, groundY - 95, 28, 0, Math.PI * 2); ctx.arc(tx + 24, groundY - 95, 28, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = greens[1];
+        ctx.beginPath(); ctx.arc(tx, groundY - 112, 38, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = greens[2];
+        ctx.beginPath(); ctx.arc(tx - 8, groundY - 122, 20, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      // 繪製森林動物（小鹿、兔子、飛鳥、花草）
+      function drawForestWildlife(viewLeft, viewRight) {
+        ctx.save();
+        // 飛鳥群（隨時間在森林上空滑翔振翅）
+        for (let b = 0; b < 8; b++) {
+          const bx = ((b * 720 + animClock * (1.1 + (b % 3) * 0.25)) % 5800) + 120;
+          if (bx < viewLeft || bx > viewRight) continue;
+          const by = 52 + (b % 4) * 24 + Math.sin(animClock * 0.05 + b) * 8;
+          const flap = Math.sin(animClock * 0.18 + b * 1.4) * 5;
+          ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(bx - 10, by + flap);
+          ctx.quadraticCurveTo(bx - 4, by - 6, bx, by);
+          ctx.quadraticCurveTo(bx + 4, by - 6, bx + 10, by + flap);
+          ctx.stroke();
+        }
+
+        // 小鹿與野兔（在草坡上走動）
+        for (let a = 0; a < 10; a++) {
+          const baseX = a * 560 + 300;
+          const walkOffset = Math.sin(animClock * 0.02 + a) * 45;
+          const ax = baseX + walkOffset;
+          if (ax < viewLeft - 40 || ax > viewRight + 40) continue;
+          const dir = Math.cos(animClock * 0.02 + a) >= 0 ? 1 : -1;
+
+          ctx.save();
+          ctx.translate(ax, 254);
+          ctx.scale(dir, 1);
+          if (a % 2 === 0) {
+            // 小鹿
+            ctx.fillStyle = "#b45309"; ctx.strokeStyle = "#451a03"; ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.ellipse(0, 0, 15, 8.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.arc(14, -8, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-8, 8); ctx.lineTo(-9, 17); ctx.moveTo(8, 8); ctx.lineTo(9, 17); ctx.stroke();
+          } else {
+            // 小白兔
+            ctx.fillStyle = "#f8fafc"; ctx.strokeStyle = "#334155"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.ellipse(0, 6, 8, 5.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(5, 2, 4.5, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(4, -6, 1.8, 6, -0.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // 森林花草叢
+        const firstFlower = Math.max(40, Math.floor(viewLeft / 90) * 90);
+        const lastFlower = Math.min(5950, viewRight);
+        const flowerPalette = ["#f472b6", "#facc15", "#ffffff", "#fb923c"];
+        for (let fx = firstFlower; fx <= lastFlower; fx += 90) {
+          const fy = 242 + ((fx * 7) % 24);
+          const sway = Math.sin(animClock * 0.06 + fx * 0.02) * 2.5;
+          ctx.strokeStyle = "#4d7c0f"; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(fx, fy + 8); ctx.lineTo(fx + sway, fy); ctx.stroke();
+          ctx.fillStyle = flowerPalette[Math.abs(fx / 90) % flowerPalette.length];
+          ctx.beginPath(); ctx.arc(fx + sway, fy - 1, 3.8, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawBridgeTransition(bx) {
+        ctx.save();
+        const waterGrad = ctx.createLinearGradient(bx - 160, 0, bx + 160, 0);
+        waterGrad.addColorStop(0, "#0284c7"); waterGrad.addColorStop(0.5, "#38bdf8"); waterGrad.addColorStop(1, "#0284c7");
+        ctx.fillStyle = waterGrad;
+        ctx.fillRect(bx - 150, 220, 300, canvas.height - 220);
+
+        ctx.fillStyle = "#94a3b8"; ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.roundRect(bx - 170, MIN_LANE_Y - 18, 340, MAX_LANE_Y - MIN_LANE_Y + 26, 12);
+        ctx.fill(); ctx.stroke();
+
+        [-155, 155].forEach(offset => {
+          ctx.fillStyle = "#64748b";
+          ctx.fillRect(bx + offset - 12, MIN_LANE_Y - 64, 24, 52); ctx.strokeRect(bx + offset - 12, MIN_LANE_Y - 64, 24, 52);
+          ctx.fillStyle = "#f59e0b";
+          ctx.beginPath(); ctx.moveTo(bx + offset, MIN_LANE_Y - 95); ctx.lineTo(bx + offset + 28, MIN_LANE_Y - 82); ctx.lineTo(bx + offset, MIN_LANE_Y - 70); ctx.fill();
+        });
+        ctx.restore();
+      }
+
+      function drawCastleGateTransition(gx) {
+        ctx.save();
+        ctx.fillStyle = "#475569"; ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 3;
+        ctx.fillRect(gx - 170, 20, 95, MIN_LANE_Y - 20); ctx.strokeRect(gx - 170, 20, 95, MIN_LANE_Y - 20);
+        ctx.fillRect(gx + 75, 20, 95, MIN_LANE_Y - 20); ctx.strokeRect(gx + 75, 20, 95, MIN_LANE_Y - 20);
+        ctx.fillStyle = "#334155";
+        ctx.fillRect(gx - 85, 35, 170, 75); ctx.strokeRect(gx - 85, 35, 170, 75);
+        ctx.fillStyle = "#fbbf24";
+        ctx.beginPath(); ctx.arc(gx, 72, 20, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#cbd5e1";
+        for (let sx = gx - 65; sx <= gx + 65; sx += 22) {
+          ctx.beginPath(); ctx.moveTo(sx - 5, 110); ctx.lineTo(sx, 132); ctx.lineTo(sx + 5, 110); ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawPrisonGateTransition(px) {
+        ctx.save();
+        ctx.fillStyle = "#18181b"; ctx.strokeStyle = "#09090b"; ctx.lineWidth = 3;
+        ctx.fillRect(px - 150, 25, 300, MIN_LANE_Y - 25); ctx.strokeRect(px - 150, 25, 300, MIN_LANE_Y - 25);
+        ctx.fillStyle = "#090d16";
+        ctx.beginPath(); ctx.arc(px, MIN_LANE_Y, 95, Math.PI, 0); ctx.fill();
+        [-115, 115].forEach(ox => {
+          ctx.strokeStyle = "#71717a"; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(px + ox, 40); ctx.lineTo(px + ox, 145); ctx.stroke();
+          ctx.fillStyle = "#ef4444";
+          ctx.beginPath(); ctx.arc(px + ox, 148, 10 + Math.sin(animClock * 0.25) * 2, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.restore();
+      }
+
+      function drawEpicWorld() {
+        const viewLeft = cameraX - 250;
+        const viewRight = cameraX + canvas.width + 250;
+
+        ctx.save();
+        ctx.translate(-cameraX, 0);
+
+        // 區域 1（0 ~ 6000）：野外青草森林
+        if (viewRight > 0 && viewLeft < 6100) {
+          const sky = ctx.createLinearGradient(0, 0, 0, MIN_LANE_Y);
+          sky.addColorStop(0, "#0284c7"); sky.addColorStop(0.55, "#7dd3fc"); sky.addColorStop(1, "#dcfce7");
+          ctx.fillStyle = sky; ctx.fillRect(0, 0, 6000, MIN_LANE_Y);
+
+          ctx.fillStyle = "#3f6212";
+          ctx.beginPath(); ctx.moveTo(0, MIN_LANE_Y);
+          for (let mx = 0; mx <= 6000; mx += 300) {
+            ctx.lineTo(mx, 155 + Math.sin(mx * 0.004) * 32);
+          }
+          ctx.lineTo(6000, MIN_LANE_Y); ctx.closePath(); ctx.fill();
+
+          ctx.fillStyle = "#4d7c0f"; ctx.fillRect(0, 228, 6000, MIN_LANE_Y - 228);
+          ctx.fillStyle = GROUND_PATTERNS.forest; ctx.fillRect(0, MIN_LANE_Y, 6000, canvas.height - MIN_LANE_Y);
+          ctx.fillStyle = "#65a30d"; ctx.fillRect(0, MIN_LANE_Y - 4, 6000, 8);
+
+          const firstTree = Math.max(120, Math.floor(viewLeft / 240) * 240);
+          const lastTree = Math.min(5800, viewRight);
+          for (let tx = firstTree; tx <= lastTree; tx += 240) {
+            drawDetailedTree(tx, 255, tx / 240);
+          }
+          drawForestWildlife(viewLeft, viewRight);
+        }
+
+        // 區域 2（6000 ~ 12000）：繁華中東城鎮市集
+        if (viewRight > 5900 && viewLeft < 12100) {
+          const sky2 = ctx.createLinearGradient(0, 0, 0, MIN_LANE_Y);
+          sky2.addColorStop(0, "#38bdf8"); sky2.addColorStop(1, "#fef3c7");
+          ctx.fillStyle = sky2; ctx.fillRect(6000, 0, 6000, MIN_LANE_Y);
+          ctx.fillStyle = GROUND_PATTERNS.town; ctx.fillRect(6000, MIN_LANE_Y, 6000, canvas.height - MIN_LANE_Y);
+
+          const firstShop = Math.max(6260, Math.floor(viewLeft / 320) * 320);
+          const lastShop = Math.min(11700, viewRight);
+          const awnings = ["#dc2626", "#2563eb", "#d97706", "#16a34a"];
+          for (let sx = firstShop; sx <= lastShop; sx += 320) {
+            const idx = Math.floor(sx / 320);
+            ctx.fillStyle = "#fde68a"; ctx.strokeStyle = "#78350f"; ctx.lineWidth = 2;
+            ctx.fillRect(sx, 110, 210, 162); ctx.strokeRect(sx, 110, 210, 162);
+            ctx.fillStyle = "#f59e0b";
+            ctx.beginPath(); ctx.arc(sx + 105, 110, 52, Math.PI, 0); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = awnings[idx % 4];
+            ctx.beginPath(); ctx.moveTo(sx - 12, 195); ctx.lineTo(sx + 222, 195); ctx.lineTo(sx + 234, 224); ctx.lineTo(sx - 24, 224); ctx.closePath(); ctx.fill(); ctx.stroke();
+          }
+        }
+
+        // 區域 3（12000 ~ 18000）：金碧輝煌城堡大廳
+        if (viewRight > 11900 && viewLeft < 18100) {
+          const wallGrad = ctx.createLinearGradient(0, 0, 0, MIN_LANE_Y);
+          wallGrad.addColorStop(0, "#1e1b4b"); wallGrad.addColorStop(1, "#312e81");
+          ctx.fillStyle = wallGrad; ctx.fillRect(12000, 0, 6000, MIN_LANE_Y);
+          ctx.fillStyle = GROUND_PATTERNS.castle; ctx.fillRect(12000, MIN_LANE_Y, 6000, canvas.height - MIN_LANE_Y);
+          ctx.fillStyle = "rgba(185, 28, 28, 0.72)"; ctx.fillRect(12000, MIN_LANE_Y + 54, 6000, 112);
+
+          const firstCol = Math.max(12300, Math.floor(viewLeft / 340) * 340);
+          const lastCol = Math.min(17700, viewRight);
+          for (let cx = firstCol; cx <= lastCol; cx += 340) {
+            ctx.fillStyle = "#64748b"; ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 2;
+            ctx.fillRect(cx - 20, 28, 40, MIN_LANE_Y - 28); ctx.strokeRect(cx - 20, 28, 40, MIN_LANE_Y - 28);
+            ctx.fillStyle = "#b91c1c"; ctx.fillRect(cx - 12, 78, 24, 74); ctx.strokeRect(cx - 12, 78, 24, 74);
+          }
+        }
+
+        // 區域 4（18000 ~ 24000）：深淵黑曜監獄
+        if (viewRight > 17900) {
+          const jailGrad = ctx.createLinearGradient(0, 0, 0, MIN_LANE_Y);
+          jailGrad.addColorStop(0, "#090d16"); jailGrad.addColorStop(1, "#1c1917");
+          ctx.fillStyle = jailGrad; ctx.fillRect(18000, 0, 6000, MIN_LANE_Y);
+          ctx.fillStyle = GROUND_PATTERNS.prison; ctx.fillRect(18000, MIN_LANE_Y, 6000, canvas.height - MIN_LANE_Y);
+
+          const firstCell = Math.max(18320, Math.floor(viewLeft / 380) * 380);
+          const lastCell = Math.min(23700, viewRight);
+          for (let jx = firstCell; jx <= lastCell; jx += 380) {
+            ctx.fillStyle = "#27272a"; ctx.fillRect(jx, 76, 176, MIN_LANE_Y - 76);
+            ctx.strokeStyle = "#71717a"; ctx.lineWidth = 4;
+            for (let bx = jx + 16; bx <= jx + 160; bx += 24) {
+              ctx.beginPath(); ctx.moveTo(bx, 80); ctx.lineTo(bx, MIN_LANE_Y); ctx.stroke();
+            }
+          }
+        }
+
+        if (viewRight > 5750 && viewLeft < 6250) drawBridgeTransition(6000);
+        if (viewRight > 11750 && viewLeft < 12250) drawCastleGateTransition(12000);
+        if (viewRight > 17750 && viewLeft < 18250) drawPrisonGateTransition(18000);
+
+        ctx.restore();
+      }
+
+      function drawHero() {
+        const sx = player.x - cameraX, sy = player.y;
+        ctx.save();
+        if (player.invulnTimer > 0 && Math.floor(player.invulnTimer / 2) % 2 === 0) ctx.globalAlpha = 0.55;
+
+        ctx.fillStyle = "rgba(0,0,0,0.46)";
+        ctx.beginPath(); ctx.ellipse(sx, sy + 5, 25, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+        const bob = player.z === 0 ? Math.sin(player.walkPhase) * 2.5 : 0;
+        ctx.translate(sx, sy + player.z + bob);
+        ctx.scale(player.facing, 1);
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
+
+        const wave = Math.sin(animClock * 0.2) * 5;
+        ctx.fillStyle = player.cloak; ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 2.4;
+        ctx.beginPath(); ctx.moveTo(-7, -48); ctx.quadraticCurveTo(-26, -32, -32, -12 + wave); ctx.lineTo(-5, -15); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+        const legSwing = player.z === 0 ? Math.sin(player.walkPhase) * 8 : 6;
+        ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 8.5;
+        ctx.beginPath(); ctx.moveTo(-5, -16); ctx.lineTo(-5 - legSwing, -2); ctx.moveTo(5, -16); ctx.lineTo(5 + legSwing, -2); ctx.stroke();
+        ctx.strokeStyle = "#92400e"; ctx.lineWidth = 4.5;
+        ctx.beginPath(); ctx.moveTo(-5, -16); ctx.lineTo(-5 - legSwing, -2); ctx.moveTo(5, -16); ctx.lineTo(5 + legSwing, -2); ctx.stroke();
+
+        const bodyGrad = ctx.createLinearGradient(0, -50, 0, -15);
+        bodyGrad.addColorStop(0, player.tunic); bodyGrad.addColorStop(1, "#0f172a");
+        ctx.fillStyle = bodyGrad; ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 2.4;
+        ctx.beginPath(); ctx.roundRect(-14, -50, 28, 34, 7); ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = player.trim;
+        ctx.beginPath(); ctx.ellipse(-12, -45, 7, 5, -0.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(12, -45, 7, 5, 0.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+        const faceGrad = ctx.createRadialGradient(2, -62, 2, 0, -60, 13);
+        faceGrad.addColorStop(0, "#fef3c7"); faceGrad.addColorStop(1, "#f59e0b");
+        ctx.fillStyle = faceGrad;
+        ctx.beginPath(); ctx.arc(0, -61, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = "#451a03";
+        ctx.beginPath(); ctx.arc(-1, -63, 12.2, Math.PI * 0.85, Math.PI * 2.1); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = player.trim; ctx.fillRect(-11, -66, 22, 3.5);
+
+        ctx.fillStyle = "#0f172a";
+        ctx.beginPath(); ctx.ellipse(5, -60, 2.2, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+        const rot = player.attackTimer > 0 ? -0.88 : -0.22;
+        ctx.save(); ctx.translate(11, -33); ctx.rotate(rot);
+        if (player.weaponType === "heavyMace") {
+          ctx.fillStyle = "#78350f"; ctx.fillRect(0, -2.5, 26, 5); ctx.strokeRect(0, -2.5, 26, 5);
+          ctx.fillStyle = "#fbbf24"; ctx.beginPath(); ctx.arc(30, 0, 9.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        } else if (player.weaponType === "longSword") {
+          ctx.fillStyle = "#f8fafc";
+          ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(38, -2); ctx.lineTo(44, 0); ctx.lineTo(38, 2); ctx.lineTo(0, 3); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#fbbf24"; ctx.fillRect(5, -8, 4, 16);
+        } else {
+          ctx.fillStyle = "#e2e8f0";
+          ctx.beginPath(); ctx.moveTo(0, -2.5); ctx.lineTo(28, -2); ctx.lineTo(33, 0); ctx.lineTo(28, 2); ctx.lineTo(0, 2.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(4, 0, 6, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.restore();
+      }
+
+      // 繪製五款聖經惡人（全部加上完整擺動手臂與雙腿關節）
+      function drawEnemy(en) {
+        const sx = en.x - cameraX, sy = en.y;
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.beginPath(); ctx.ellipse(sx, sy + 5, 23 * en.scale, 7.5 * en.scale, 0, 0, Math.PI * 2); ctx.fill();
+
+        const bob = Math.sin(en.walkPhase) * 2.2;
+        const limbSwing = Math.sin(en.walkPhase) * 8;
+        const armSwing = en.atkAnim > 0 ? -0.95 : -Math.sin(en.walkPhase) * 0.45;
+
+        ctx.translate(sx, sy + bob);
+        ctx.scale(en.facing * en.scale, en.scale);
+        ctx.strokeStyle = "#090d16"; ctx.lineWidth = 2.4; ctx.lineJoin = "round"; ctx.lineCap = "round";
+        const flash = en.hitFlash > 0;
+
+        // 完整雙腿（擺動）
+        ctx.strokeStyle = "#090d16"; ctx.lineWidth = 8;
+        ctx.beginPath(); ctx.moveTo(-5, -16); ctx.lineTo(-5 - limbSwing, -1); ctx.moveTo(5, -16); ctx.lineTo(5 + limbSwing, -1); ctx.stroke();
+        ctx.strokeStyle = flash ? "#fff" : (en.level === 5 ? "#9d174d" : "#3f2e21"); ctx.lineWidth = 4.2;
+        ctx.beginPath(); ctx.moveTo(-5, -16); ctx.lineTo(-5 - limbSwing, -1); ctx.moveTo(5, -16); ctx.lineTo(5 + limbSwing, -1); ctx.stroke();
+
+        // 完整手臂＋道具（擺動）
+        ctx.save();
+        ctx.translate(9, -36);
+        ctx.rotate(armSwing);
+        ctx.strokeStyle = "#090d16"; ctx.lineWidth = 7.5;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(14, 4); ctx.stroke();
+        ctx.strokeStyle = flash ? "#fff" : "#d97706"; ctx.lineWidth = 3.8;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(14, 4); ctx.stroke();
+
+        if (en.level === 1) {
+          // 該隱：染血石塊
+          ctx.fillStyle = "#78716c"; ctx.strokeStyle = "#090d16"; ctx.lineWidth = 2.2;
+          ctx.beginPath(); ctx.arc(17, 5, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#dc2626"; ctx.beginPath(); ctx.arc(18, 4, 3.2, 0, Math.PI * 2); ctx.fill();
+        } else if (en.level === 3) {
+          // 埃及法老：黃金眼鏡蛇權杖
+          ctx.strokeStyle = "#facc15"; ctx.lineWidth = 3.2;
+          ctx.beginPath(); ctx.moveTo(15, 20); ctx.lineTo(15, -18); ctx.arc(11, -21, 4.5, 0, Math.PI * 1.5); ctx.stroke();
+        } else if (en.level === 5) {
+          // 耶洗別王后：黃金酒杯
+          ctx.fillStyle = "#facc15"; ctx.strokeStyle = "#090d16"; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(16, 2, 5, 0, Math.PI); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.strokeStyle = "#090d16"; ctx.lineWidth = 2.4;
+
+        if (en.level === 1) {
+          ctx.fillStyle = flash ? "#fff" : "#92400e";
+          ctx.beginPath(); ctx.roundRect(-13, -44, 26, 30, 5); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = flash ? "#fff" : "#292524";
+          ctx.beginPath(); ctx.arc(-1, -55, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = flash ? "#fff" : "#d97706";
+          ctx.beginPath(); ctx.arc(2, -55, 10, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#ef4444"; ctx.beginPath(); ctx.arc(3, -62, 3, 0, Math.PI * 2); ctx.fill();
+        } else if (en.level === 3) {
+          ctx.fillStyle = flash ? "#fff" : "#fef3c7";
+          ctx.beginPath(); ctx.roundRect(-14, -46, 28, 32, 5); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#0284c7"; ctx.fillRect(-14, -46, 28, 8);
+          ctx.fillStyle = "#fbbf24"; ctx.fillRect(-14, -39, 28, 4);
+          ctx.fillStyle = flash ? "#fff" : "#1d4ed8";
+          ctx.beginPath(); ctx.moveTo(-15, -67); ctx.lineTo(15, -67); ctx.lineTo(19, -43); ctx.lineTo(-19, -43); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#fde047"; ctx.fillRect(-16, -61, 32, 3.5); ctx.fillRect(-17, -53, 34, 3.5);
+          ctx.fillStyle = flash ? "#fff" : "#eab308"; ctx.beginPath(); ctx.arc(1, -56, 9.5, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#fbbf24"; ctx.fillRect(2, -48, 4.5, 10); ctx.strokeRect(2, -48, 4.5, 10);
+        } else if (en.level === 5) {
+          ctx.fillStyle = flash ? "#fff" : "#9d174d";
+          ctx.beginPath(); ctx.moveTo(-12, -46); ctx.lineTo(12, -46); ctx.lineTo(18, -8); ctx.lineTo(-18, -8); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = flash ? "#fff" : "#fde68a"; ctx.beginPath(); ctx.arc(0, -56, 10.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#fbbf24";
+          ctx.beginPath(); ctx.moveTo(-10, -64); ctx.lineTo(-7, -74); ctx.lineTo(0, -67); ctx.lineTo(7, -74); ctx.lineTo(10, -64); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#1e1b4b"; ctx.fillRect(1, -58, 7, 3);
+        } else if (en.level === 10) {
+          const armor = ctx.createLinearGradient(0, -54, 0, -12);
+          armor.addColorStop(0, flash ? "#fff" : "#ca8a04"); armor.addColorStop(1, flash ? "#fff" : "#713f12");
+          ctx.fillStyle = armor; ctx.beginPath(); ctx.roundRect(-17, -54, 34, 40, 7); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = flash ? "#fff" : "#fef08a"; ctx.beginPath(); ctx.arc(0, -65, 11.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#eab308"; ctx.fillRect(-12, -77, 24, 9); ctx.strokeRect(-12, -77, 24, 9);
+          ctx.fillStyle = "#92400e"; ctx.fillRect(10, -48, 12, 34); ctx.strokeRect(10, -48, 12, 34);
+        } else {
+          ctx.fillStyle = flash ? "#fff" : "#450a0a";
+          ctx.beginPath();
+          ctx.moveTo(-10, -46); ctx.lineTo(-38, -68); ctx.lineTo(-28, -24);
+          ctx.moveTo(10, -46); ctx.lineTo(38, -68); ctx.lineTo(28, -24);
+          ctx.fill(); ctx.stroke();
+          const devilGrad = ctx.createLinearGradient(0, -56, 0, -12);
+          devilGrad.addColorStop(0, flash ? "#fff" : "#dc2626"); devilGrad.addColorStop(1, flash ? "#fff" : "#18181b");
+          ctx.fillStyle = devilGrad; ctx.beginPath(); ctx.roundRect(-18, -56, 36, 42, 7); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = flash ? "#fff" : "#fca5a5"; ctx.beginPath(); ctx.arc(0, -68, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = "#f97316";
+          ctx.beginPath(); ctx.moveTo(-8, -76); ctx.lineTo(-20, -94); ctx.lineTo(-2, -78); ctx.moveTo(8, -76); ctx.lineTo(20, -94); ctx.lineTo(2, -78); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+
+        const by = sy - 76 * en.scale - 12;
+        ctx.fillStyle = en.level === 20 ? "#fca5a5" : "#fde68a";
+        ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText("Lv." + en.level + " " + en.name, sx, by - 4);
+        ctx.fillStyle = "rgba(0,0,0,0.75)"; ctx.fillRect(sx - 23, by, 46, 5.5);
+        ctx.fillStyle = en.level >= 10 ? "#fb7185" : "#4ade80";
+        ctx.fillRect(sx - 23, by, 46 * Math.max(0, en.hp / en.maxHp), 5.5);
+      }
+
+      function loop(now) {
+        if (!running) return;
+        const dt = Math.min(0.05, ((now || performance.now()) - (loop._last || now || performance.now())) / 1000);
+        loop._last = now || performance.now();
+        animClock++;
+
+        let vx = 0, vy = 0;
+        if (input.left) vx -= player.speedX;
+        if (input.right) vx += player.speedX;
+        if (input.up) vy -= player.speedY;
+        if (input.down) vy += player.speedY;
+        if (vx !== 0) player.facing = vx > 0 ? 1 : -1;
+        if (vx !== 0 || vy !== 0) player.walkPhase += 0.25;
+
+        player.x += vx + player.knockVx;
+        player.y += vy;
+        player.knockVx *= 0.78;
+        player.x = Math.max(cameraX + 36, Math.min(activeTrigger ? cameraX + canvas.width - 36 : WORLD_WIDTH - 48, player.x));
+        player.y = Math.max(MIN_LANE_Y + 8, Math.min(MAX_LANE_Y, player.y));
+
+        // 平滑跟隨鏡頭（不突跳、清完敵人維持原位不抖動）
+        if (!activeTrigger) {
+          const desiredCam = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, player.x - canvas.width * 0.36));
+          if (desiredCam > targetCameraX) targetCameraX = desiredCam;
+          for (let i = 0; i < triggers.length; i++) {
+            if (!triggers[i].triggered && player.x >= triggers[i].triggerX) {
+              activateTrigger(triggers[i]);
+              break;
+            }
+          }
+        }
+        cameraX += (targetCameraX - cameraX) * 0.14;
+        if (Math.abs(targetCameraX - cameraX) < 0.5) cameraX = targetCameraX;
+
+        updateHud();
+
+        if (player.z < 0 || player.vz < 0) {
+          player.z += player.vz; player.vz += 0.65;
+          if (player.z >= 0) { player.z = 0; player.vz = 0; }
+        }
+        if (player.attackCooldown > 0) player.attackCooldown--;
+        if (player.attackTimer > 0) player.attackTimer--;
+        if (player.invulnTimer > 0) player.invulnTimer--;
+
+        for (let i = pickups.length - 1; i >= 0; i--) {
+          const pk = pickups[i];
+          pk.life -= pk.decayPerSec * dt;
+          if (pk.life <= 0) { pickups.splice(i, 1); continue; }
+          if (Math.hypot(player.x - pk.x, player.y - pk.y) < 34 && Math.abs(player.z) < 28) {
+            player.hp = Math.min(player.maxHp, player.hp + pk.healAmount);
+            pickups.splice(i, 1);
+            updateHud();
+          }
+        }
+
+        for (let i = 0; i < enemies.length; i++) {
+          const en = enemies[i];
+          const dx = player.x - en.x, dy = player.y - en.y;
+          en.facing = dx >= 0 ? 1 : -1;
+          en.walkPhase += 0.17 * en.speedX;
+          if (en.atkAnim > 0) en.atkAnim--;
+
+          if (Math.abs(dx) > 44 * en.scale) en.x += Math.sign(dx) * en.speedX + en.knockVx; else en.x += en.knockVx;
+          if (Math.abs(dy) > 9) en.y += Math.sign(dy) * en.speedY;
+          en.knockVx *= 0.78;
+          if (en.hitFlash > 0) en.hitFlash--;
+          if (en.atkCooldown > 0) en.atkCooldown--;
+
+          if (Math.abs(dx) < 54 * en.scale && Math.abs(dy) < 20 && player.z > -20 && en.atkCooldown <= 0 && player.invulnTimer <= 0) {
+            en.atkCooldown = 58;
+            en.atkAnim = 10;
+            player.hp -= en.atkDamage;
+            player.invulnTimer = 28;
+            player.knockVx = en.facing * 5;
+            updateHud();
+            if (player.hp <= 0) { endGame(false); return; }
+          }
+        }
+
+        drawEpicWorld();
+
+        pickups.forEach(pk => {
+          if (pk.life < 0.35 && Math.floor(pk.life * 28) % 2 === 0) return;
+          const px = pk.x - cameraX;
+          ctx.save(); ctx.translate(px, pk.y);
+          ctx.strokeStyle = pk.life < 0.35 ? "#f87171" : "#4ade80"; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(0, -10, 14, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pk.life); ctx.stroke();
+          ctx.fillStyle = "#22c55e"; ctx.beginPath(); ctx.arc(0, -8, 9.5, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(-4, -9.5, 8, 3); ctx.fillRect(-1.5, -12, 3, 8);
+          ctx.restore();
+        });
+
+        const list = [{ type: "p", y: player.y }, ...enemies.map(e => ({ type: "e", y: e.y, ref: e }))].sort((a, b) => a.y - b.y);
+        list.forEach(item => item.type === "p" ? drawHero() : drawEnemy(item.ref));
+
+        if (slashEffect) {
+          ctx.save(); ctx.translate(slashEffect.x - cameraX, slashEffect.y); ctx.scale(slashEffect.facing, 1);
+          ctx.strokeStyle = "#fde047"; ctx.lineWidth = 6; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.arc(-8, 0, slashEffect.radius, -0.85, 0.85); ctx.stroke();
+          ctx.restore();
+          slashEffect.life -= 0.16; if (slashEffect.life <= 0) slashEffect = null;
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+          if (p.life <= 0) { particles.splice(i, 1); continue; }
+          ctx.fillStyle = p.color; ctx.fillRect(p.x - cameraX, p.y, 4, 4);
+        }
+
+        if (!activeTrigger && goBannerTimer > 0) {
+          goBannerTimer--;
+          if (Math.floor(animClock / 12) % 2 === 1) {
+            ctx.fillStyle = "rgba(251,191,36,0.94)";
+            ctx.beginPath(); ctx.roundRect(canvas.width - 134, 56, 110, 34, 8); ctx.fill();
+            ctx.fillStyle = "#181007"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "center";
+            ctx.fillText("GO ➔", canvas.width - 79, 78);
+          }
+        }
+
+        rafId = requestAnimationFrame(loop);
+      }
+
+      window.addEventListener("keydown", e => {
+        if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") input.left = true;
+        if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") input.right = true;
+        if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") input.up = true;
+        if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") input.down = true;
+        if (e.key === "j" || e.key === "J" || e.key === "z" || e.key === "Z") triggerAttack();
+        if (e.key === "k" || e.key === "K" || e.key === "x" || e.key === "X") triggerJump();
+      });
+      window.addEventListener("keyup", e => {
+        if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") input.left = false;
+        if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") input.right = false;
+        if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") input.up = false;
+        if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") input.down = false;
+      });
+      document.querySelectorAll(".dpad-btn").forEach(btn => {
+        const k = btn.getAttribute("data-key");
+        btn.addEventListener("pointerdown", e => { e.preventDefault(); input[k] = true; });
+        ["pointerup", "pointerleave", "pointercancel"].forEach(ev => btn.addEventListener(ev, () => { input[k] = false; }));
+      });
+      document.getElementById("btnAttack").addEventListener("pointerdown", e => { e.preventDefault(); triggerAttack(); });
+      document.getElementById("btnJump").addEventListener("pointerdown", e => { e.preventDefault(); triggerJump(); });
+
+      window.selectHero = selectHero;
+      window.startBibleEpicGame = startGame;
+    })();
+  </script>
+</body>
+</html>

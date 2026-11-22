@@ -329,7 +329,7 @@
         updateHud();
       }
 
-      function startGame() {
+      function startGame() { initAudio(); startMusic();
         if (rafId) cancelAnimationFrame(rafId);
         const cfg = HERO_CONFIGS[selectedHeroKey] || HERO_CONFIGS.david;
         Object.assign(player, cfg, {
@@ -349,7 +349,7 @@
       }
 
       function endGame(victory) {
-        running = false;
+        running = false; stopMusic();
         if (rafId) cancelAnimationFrame(rafId);
         overlayTitle.textContent = victory ? "🏆 史詩凱旋・光耀聖殿！" : "💀 勇士力竭倒下";
         overlayDesc.innerHTML = (victory ? "你橫越 24,000 史詩戰場並擊敗撒旦！" : "善用上下走位與回血聖膏再戰！") + "<br>最終得分：<strong>" + score + "</strong> 分";
@@ -358,13 +358,13 @@
       }
 
       function triggerJump() {
-        if (running && player.z === 0) player.vz = player.jumpPower;
+       if (running && player.z === 0) { player.vz = player.jumpPower; SFX.jump(); }
       }
 
       function triggerAttack() {
         if (!running || player.attackCooldown > 0) return;
         player.attackCooldown = 16;
-        player.attackTimer = 9;
+        player.attackTimer = 9; SFX.attack();
         slashEffect = { x: player.x + player.facing * (player.reachX * 0.52), y: player.y + player.z - 34, facing: player.facing, radius: player.reachX * 0.46, life: 1 };
 
         for (let i = enemies.length - 1; i >= 0; i--) {
@@ -372,7 +372,7 @@
           const dx = (en.x - player.x) * player.facing;
           const dy = Math.abs(en.y - player.y);
           if (dx >= -14 && dx <= player.reachX && dy <= player.laneTolY) {
-            en.hp -= player.atk; en.hitFlash = 7; en.knockVx = player.facing * 7.5;
+            en.hp -= player.atk; SFX.hit(); en.hitFlash = 7; en.knockVx = player.facing * 7.5;
             for (let k = 0; k < 7; k++) particles.push({ x: en.x, y: en.y - 30, vx: (Math.random() - 0.5) * 6.5, vy: (Math.random() - 0.7) * 5.5, life: 1, color: "#fde047" });
             if (en.hp <= 0) {
               score += en.score;
@@ -836,7 +836,7 @@
           pk.life -= pk.decayPerSec * dt;
           if (pk.life <= 0) { pickups.splice(i, 1); continue; }
           if (Math.hypot(player.x - pk.x, player.y - pk.y) < 34 && Math.abs(player.z) < 28) {
-            player.hp = Math.min(player.maxHp, player.hp + pk.healAmount);
+            player.hp = Math.min(player.maxHp, player.hp + pk.healAmount); SFX.heal();
             pickups.splice(i, 1);
             updateHud();
           }
@@ -931,6 +931,41 @@
       document.getElementById("btnAttack").addEventListener("pointerdown", e => { e.preventDefault(); triggerAttack(); });
       document.getElementById("btnJump").addEventListener("pointerdown", e => { e.preventDefault(); triggerJump(); });
 
+      let actx = null, musicTimer = null, noteIdx = 0;
+function initAudio() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (actx && actx.state === "suspended") actx.resume();
+}
+function beep(freq, dur, type, vol, slideTo) {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || "square";
+  o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(vol || 0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(actx.destination);
+  o.start(t); o.stop(t + dur);
+}
+const SFX = {
+  attack: () => beep(500, 0.08, "sawtooth", 0.07, 200),
+  hit: () => beep(180, 0.1, "square", 0.1, 80),
+  jump: () => beep(300, 0.15, "square", 0.06, 650),
+  hurt: () => beep(150, 0.25, "sawtooth", 0.12, 60),
+  heal: () => { beep(600, 0.1, "sine", 0.1); setTimeout(() => beep(900, 0.15, "sine", 0.1), 100); }
+};
+const MELODY = [262,330,392,330,294,349,440,349,262,330,392,523,392,330,294,196];
+function startMusic() {
+  stopMusic(); noteIdx = 0;
+  musicTimer = setInterval(() => {
+    const n = MELODY[noteIdx % MELODY.length];
+    beep(n, 0.28, "triangle", 0.05);
+    if (noteIdx % 4 === 0) beep(n / 2, 0.5, "sine", 0.06);
+    noteIdx++;
+  }, 300);
+}
+function stopMusic() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } }
       window.selectHero = selectHero;
       window.startBibleEpicGame = startGame;
     })();

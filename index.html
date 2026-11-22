@@ -172,7 +172,7 @@
         let cursorX = 420;
         for (let w = 1; w <= TOTAL_WAVES; w++) {
           const step = 350 + Math.floor(Math.random() * 101); // 350 ~ 450
-          const count = 2 + Math.floor(Math.random() * 2);  // 2 ~ 3 人
+          const count = (w === TOTAL_WAVES) ? 1 : 2 + Math.floor(Math.random() * 2);  // 最後一波只有 1 隻
           list.push({
             waveNum: w,
             triggerX: cursorX,
@@ -268,9 +268,12 @@
 
       // 依目前所在區域與波次隨機挑選 2~3 位聖經敵人，從畫面右側或左右隨機邊緣進場
       function pickEnemyLevelForWorld(wx, waveNum) {
-        if (waveNum >= TOTAL_WAVES - 1 && wx >= 18000) {
-          return Math.random() < 0.65 ? 20 : 10;
-        }
+        if (waveNum >= TOTAL_WAVES && wx >= 18000) {
+  return 20;
+}
+if (waveNum >= TOTAL_WAVES - 1 && wx >= 18000) {
+  return 10;
+}
         if (wx < 6000) {
           return Math.random() < 0.72 ? 1 : 3;
         }
